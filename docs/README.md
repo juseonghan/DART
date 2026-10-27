@@ -16,9 +16,6 @@ window.DART_LINKS = {
 ```
 An empty value shows a greyed-out button with a "soon" tag, so you can publish before everything is public.
 
-Also check the "Extract features" snippet: the checkpoint filename (`dart_vitb16.pth`)
-and key (`teacher_backbone`, which is what `train.py` saves) should match the weights you release.
-
 ## 2. Publish with GitHub Pages
 **Option A, in the code repo (recommended):** copy `index.html`, `.nojekyll` and `static/` into a
 `docs/` folder of the DART repo, push, then go to *Settings → Pages → Build and deployment →

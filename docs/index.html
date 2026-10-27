@@ -147,14 +147,21 @@ sup{font-size:.7em}
 .rcard .tag{transition:opacity .2s}
 
 /* ---------- code ---------- */
-.codes{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 pre{margin:0;background:#0f1b2a;color:#d8e1ee;border-radius:14px;padding:18px 18px;overflow-x:auto;font:13.5px/1.6 var(--mono);position:relative}
-pre .c{color:#7d8ca3}.pre-k{color:#FFB48E}
 .codebox{position:relative;min-width:0}
 .codebox h3{font-size:17px;color:var(--navy);margin:0 0 10px}
 .copy{position:absolute;top:-3px;right:0;border:0;border-radius:8px;padding:6px 12px;font:600 12px var(--body);background:var(--navy);color:#fff;cursor:pointer}
 .copy:hover{background:var(--orange)}
 
+/* ---------- qualitative grids ---------- */
+.qwrap{overflow-x:auto;background:#fff;border-radius:var(--radius);box-shadow:0 0 0 1px var(--line);padding:14px}
+.qgrid{display:grid;grid-template-columns:118px repeat(var(--cols),minmax(88px,1fr));gap:5px;min-width:calc(118px + var(--cols) * 93px);align-items:center}
+.qgrid .hd{font:600 14px/1.2 var(--body);color:var(--ink-2);text-align:center;padding:4px 0 6px}
+.qgrid .hd.me{color:#fff;background:var(--orange);border-radius:8px;padding:6px 0}
+.qgrid .rl{font:600 14px/1.25 var(--body);color:var(--navy);text-align:right;padding-right:8px}
+.qgrid img{width:100%;border-radius:6px}
+.qgrid img.me{outline:3px solid var(--orange);outline-offset:-3px}
+footer .ai{display:block;margin-top:8px;font-size:13px;color:#98a2b1}
 footer{padding:40px 0 60px;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
 
 /* reveal */
@@ -163,7 +170,7 @@ footer{padding:40px 0 60px;color:var(--muted);font-size:14px;border-top:1px soli
 @media (prefers-reduced-motion: reduce){.rv{opacity:1;transform:none}.cell .f,.cell .b,.fill{transition:none}}
 
 @media (max-width:860px){
-  .hero-grid,.tldr,.cmp-grid,.codes{grid-template-columns:1fr}
+  .hero-grid,.tldr,.cmp-grid{grid-template-columns:1fr}
   .steps{grid-template-columns:1fr}
   .reco{grid-template-columns:1fr 1fr}
   .bar{grid-template-columns:118px 1fr 54px;font-size:13px}
@@ -225,9 +232,9 @@ window.DART_LINKS = {
 <section>
   <div class="wrap">
     <div class="tldr rv">
-      <p>Ask DINOv2 to also <em>paint the depth</em> of the patches it can't see. The features get sharper for surgery, and at test time it still only needs <em>RGB</em>.</p>
+      <p>Reconstructing <em>pseudo-depth</em> at masked iBOT patches during DINOv2 pretraining yields stronger features for segmentation, depth, and recognition, with <em>zero extra cost</em> at inference.</p>
       <div class="pills">
-        <div class="pill"><b>0</b><span>extra inference cost: the depth head is thrown away after pretraining</span></div>
+        <div class="pill"><b>0</b><span>extra inference cost: the depth head is discarded after pretraining</span></div>
         <div class="pill"><b>0</b><span>depth labels or sensors: targets are pseudo-depth from Depth Anything V2</span></div>
         <div class="pill"><b>1</b><span>extra loss term on top of the unchanged DINOv2 recipe</span></div>
       </div>
@@ -275,44 +282,13 @@ window.DART_LINKS = {
       </div>
     </div>
 
-    <div class="subhead"><h3>Segmentation: drag to compare</h3>
-      <div class="sub-ctrl" id="segBase" style="margin:0"><span class="lbl">Baseline</span></div>
-    </div>
-    <div class="cmp-grid rv">
-      <div>
-        <div class="cmp" id="segCmp">
-          <img class="bottom" alt="Baseline prediction">
-          <div class="top"><img alt="DART prediction"></div>
-          <div class="handle"></div>
-          <span class="tag l" data-role="left">DINOv2</span><span class="tag r">DART</span>
-        </div>
-        <div class="thumbs" id="segThumbs"></div>
-      </div>
-      <div class="side">
-        <div class="gt"><img id="segGT" alt="Ground truth"><span class="tag l">Ground truth</span></div>
-        <h3 id="segName">EndoVis18</h3>
-        <p>DART gives crisper instrument boundaries and fewer stray false-positive blobs, even against DINOv2 trained on identical data.</p>
-      </div>
-    </div>
+    <div class="subhead"><h3>Qualitative segmentation</h3>
+      <span style="font-size:14px;color:var(--muted)">Multiscale head, models pretrained on LEMON</span></div>
+    <div class="qwrap rv"><div class="qgrid" id="segGrid" style="--cols:6"></div></div>
 
-    <div class="subhead"><h3>Depth on SCARED-C</h3>
-      <div class="sub-ctrl" id="depBase" style="margin:0"><span class="lbl">Baseline</span></div>
-    </div>
-    <div class="cmp-grid rv">
-      <div>
-        <div class="cmp" id="depCmp">
-          <img class="bottom" alt="Baseline depth">
-          <div class="top"><img alt="DART depth"></div>
-          <div class="handle"></div>
-          <span class="tag l" data-role="left">DINOv2</span><span class="tag r">DART</span>
-        </div>
-        <div class="thumbs" id="depThumbs"></div>
-      </div>
-      <div class="side">
-        <div class="gt"><img id="depRGB" alt="Input RGB"><span class="tag l">Input</span></div>
-        <p>Finer delineation of small protruding structures, while LEMON-FM and DINOv2 tend to over-smooth. DART reaches δ1 = 0.653, the best of all models.</p>
-      </div>
-    </div>
+    <div class="subhead"><h3>Qualitative depth on SCARED-C</h3>
+      <span style="font-size:14px;color:var(--muted)">DPT head, models pretrained on LEMON</span></div>
+    <div class="qwrap rv"><div class="qgrid" id="depGrid" style="--cols:7"></div></div>
   </div>
 </section>
 
@@ -343,49 +319,6 @@ window.DART_LINKS = {
   </div>
 </section>
 
-<section id="code" style="background:var(--panel)">
-  <div class="wrap">
-    <div class="kicker">Use it</div>
-    <h2>Drop-in RGB backbone</h2>
-    <p class="lede">The released encoder is a plain ViT-B/16. Load it and use it like any DINOv2 backbone: no depth input anywhere.</p>
-    <div class="codes">
-      <div class="codebox">
-        <h3>Extract features</h3>
-<pre id="code1"><span class="pre-k">import</span> torch
-<span class="pre-k">from</span> dart.vit <span class="pre-k">import</span> ViT
-
-model = ViT(img_size=<span class="pre-k">224</span>, patch_size=<span class="pre-k">16</span>, embed_dim=<span class="pre-k">768</span>,
-            depth=<span class="pre-k">12</span>, num_heads=<span class="pre-k">12</span>)
-ckpt = torch.load(<span class="pre-k">"dart_vitb16.pth"</span>, map_location=<span class="pre-k">"cpu"</span>)
-model.load_state_dict(ckpt[<span class="pre-k">"teacher_backbone"</span>])
-model.eval()
-
-<span class="c"># img: (B, 3, H, W), ImageNet-normalized RGB</span>
-cls   = model(img)                   <span class="c"># (B, 768)</span>
-fmap  = model.forward_features(img)  <span class="c"># (B, 768, H/16, W/16)</span></pre>
-        <button class="copy" data-copy="code1">Copy</button>
-      </div>
-      <div class="codebox">
-        <h3>Pretrain your own</h3>
-<pre id="code2"><span class="c"># 1) RGB-D shards: video frames + Depth Anything V2 pseudo-depth</span>
-python video_to_rgbd_shards.py \
-  --video_dir /path/to/videos --output_path /path/to/shards \
-  --depth_anything_repo /path/to/Depth-Anything-V2 \
-  --model_checkpoint checkpoints/depth_anything_v2_vitl.pth \
-  --encoder vitl
-
-<span class="c"># 2) DINOv2 + depth-as-target pretraining</span>
-torchrun --nproc_per_node=2 train.py \
-  --data_path /path/to/shards --save_dir /save/path \
-  --arch vit_base --patch_size 16 --base_lr 1.5e-3 \
-  --batch_size 128 --momentum_teacher 0.996 \
-  --depth_loss_weight 0.1</pre>
-        <button class="copy" data-copy="code2">Copy</button>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section id="bibtex">
   <div class="wrap">
     <div class="kicker">Cite</div>
@@ -405,7 +338,8 @@ torchrun --nproc_per_node=2 train.py \
 </main>
 
 <footer>
-  <div class="wrap">Questions? <a href="mailto:john.j.han@vanderbilt.edu">john.j.han@vanderbilt.edu</a> · Pretraining data: LEMON · Pseudo-depth: <a href="https://depth-anything-v2.github.io/">Depth Anything V2</a></div>
+  <div class="wrap">Questions? <a href="mailto:john.j.han@vanderbilt.edu">john.j.han@vanderbilt.edu</a> · Pretraining data: LEMON · Pseudo-depth: <a href="https://depth-anything-v2.github.io/">Depth Anything V2</a>
+    <span class="ai">This website was generated with the help of AI tools.</span></div>
 </footer>
 
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
@@ -594,37 +528,21 @@ function thumbs(id, items, onPick) {
   });
   box.querySelector("button").classList.add("active");
 }
-function baselinePicker(id, opts, onPick) {
-  const box = document.getElementById(id);
-  opts.forEach(([key, label], i) => {
-    const b = document.createElement("button"); b.className = "seg-chip" + (i === 0 ? " active" : ""); b.textContent = label;
-    b.onclick = () => { box.querySelectorAll(".seg-chip").forEach(x => x.classList.remove("active")); b.classList.add("active"); onPick(key, label); };
-    box.appendChild(b);
+// qualitative grids
+function buildGrid(id, cols, rows) {
+  const g = document.getElementById(id);
+  let h = '<div></div>' + cols.map(([k, l]) => `<div class="hd${k === "dart" ? " me" : ""}">${l}</div>`).join("");
+  rows.forEach(([label, pre]) => {
+    h += `<div class="rl">${label}</div>` + cols.map(([k, l]) =>
+      `<img src="${T}${pre}_${k}.jpg" alt="${label}: ${l}" loading="lazy"${k === "dart" ? ' class="me"' : ""}>`).join("");
   });
+  g.innerHTML = h;
 }
-const BASES = [["dinov2", "DINOv2"], ["lemonfm", "LEMON-FM"], ["mae", "MAE"], ["multimae", "MultiMAE"]];
-
-// segmentation
-const SEG_EX = [["EndoVis18", 1], ["CholecInstanceSeg", 2], ["CholecSeg8k", 3], ["CholecSeg8k", 4]];
-const seg = makeCmp(document.getElementById("segCmp")); let segI = 1, segB = ["dinov2", "DINOv2"];
-function segShow() {
-  seg.load(`${T}seg${segI}_${segB[0]}.jpg`, `${T}seg${segI}_dart.jpg`, segB[1]);
-  document.getElementById("segGT").src = `${T}seg${segI}_gt.jpg`;
-  document.getElementById("segName").textContent = SEG_EX[segI - 1][0];
-}
-thumbs("segThumbs", SEG_EX.map(([n, k]) => ({ name: n, thumb: `${T}seg${k}_gt.jpg` })), i => { segI = i + 1; segShow(); });
-baselinePicker("segBase", BASES, (k, l) => { segB = [k, l]; segShow(); });
-segShow();
-
-// depth
-const dep = makeCmp(document.getElementById("depCmp")); let depI = 1, depB = ["dinov2", "DINOv2"];
-function depShow() {
-  dep.load(`${T}scared${depI}_${depB[0]}.jpg`, `${T}scared${depI}_dart.jpg`, depB[1]);
-  document.getElementById("depRGB").src = `${T}scared${depI}_rgb.jpg`;
-}
-thumbs("depThumbs", [1, 2].map(k => ({ name: `SCARED-C ${k}`, thumb: `${T}scared${k}_rgb.jpg` })), i => { depI = i + 1; depShow(); });
-baselinePicker("depBase", BASES, (k, l) => { depB = [k, l]; depShow(); });
-depShow();
+const MODELS_Q = [["lemonfm", "LEMON-FM"], ["mae", "MAE"], ["multimae", "MultiMAE"], ["dinov2", "DINOv2"], ["dart", "DART"]];
+buildGrid("segGrid", [["gt", "Ground truth"], ...MODELS_Q],
+  [["EndoVis18", "seg1"], ["CholecISeg", "seg2"], ["CholecSeg8k", "seg3"], ["CholecSeg8k", "seg4"]]);
+buildGrid("depGrid", [["rgb", "Input"], ["gt", "Ground truth"], ...MODELS_Q],
+  [["Example 1", "scared1"], ["Example 2", "scared2"]]);
 
 // PCA
 const pca = makeCmp(document.getElementById("pcaCmp")); let pcaI = 1;
