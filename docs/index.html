@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DART: Depth-as-Target Pretraining</title>
+<meta name="description" content="DART adds a pseudo-depth reconstruction target to DINOv2 pretraining for stronger surgical vision foundation models, with RGB-only inference. BMVC 2026.">
+<meta property="og:title" content="DART: Depth-as-Target Pretraining for Surgical Vision Foundation Models">
+<meta property="og:description" content="Free pseudo-depth as a pretraining target makes better surgical VFMs, with zero extra inference cost. BMVC 2026.">
+<meta property="og:image" content="static/img/overview.jpg">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='7' height='7' fill='%23E8743B'/%3E%3Crect x='9' width='7' height='7' fill='%2314304D'/%3E%3Crect y='9' width='7' height='7' fill='%2314304D'/%3E%3Crect x='9' y='9' width='7' height='7' fill='%233B82F6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+:root{
+  --ink:#16202e; --ink-2:#4a5566; --muted:#6b7686;
+  --navy:#14304D; --orange:#E8743B; --orange-ink:#B54A1E; --orange-soft:#FDEEE6;
+  --nat:#8FB3DE; --dom:#4B5563;
+  --bg:#ffffff; --panel:#F3F6FA; --line:#E2E8F0;
+  --radius:18px;
+  --head:"Bricolage Grotesque", system-ui, sans-serif;
+  --body:"Inter", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 var(--body);-webkit-font-smoothing:antialiased}
+a{color:var(--orange-ink)}
+img{max-width:100%;display:block}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+section{padding:64px 0}
+h1,h2,h3{font-family:var(--head);letter-spacing:-.01em;line-height:1.15;margin:0}
+h2{font-size:clamp(28px,4vw,40px);font-weight:800;color:var(--navy);margin-bottom:10px}
+.lede{color:var(--ink-2);max-width:720px;margin:0 0 28px}
+.kicker{font:600 13px/1 var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--orange-ink);margin-bottom:12px}
+
+/* ---------- hero ---------- */
+.hero{padding:56px 0 40px;background:
+  radial-gradient(1200px 400px at 85% -10%, #FDEEE6 0%, transparent 60%),
+  radial-gradient(900px 400px at -10% 10%, #E8F0FB 0%, transparent 60%)}
+.hero-grid{display:grid;grid-template-columns:1.15fr 1fr;gap:48px;align-items:center}
+.venue{display:inline-flex;gap:8px;align-items:center;background:var(--navy);color:#fff;border-radius:999px;padding:6px 14px;font:600 13px/1 var(--body);letter-spacing:.04em}
+.venue i{width:8px;height:8px;border-radius:2px;background:var(--orange);display:inline-block}
+h1{font-size:clamp(34px,5.2vw,58px);font-weight:800;color:var(--navy);margin:18px 0 18px}
+h1 .acc{color:var(--orange)}
+h1 .sub{display:block;font-size:.5em;font-weight:600;color:var(--ink-2);margin-top:12px;letter-spacing:0}
+.authors{font-size:17px;margin:0 0 4px}
+.authors a{color:var(--ink);text-decoration:none;border-bottom:1px dashed #b9c2cf}
+.authors a:hover{border-color:var(--orange)}
+.affil{color:var(--muted);font-size:15px;margin:0 0 26px}
+sup{font-size:.7em}
+.btns{display:flex;flex-wrap:wrap;gap:10px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;background:var(--navy);color:#fff;text-decoration:none;font:600 15px/1 var(--body);border:0;cursor:pointer;transition:transform .15s, background .15s}
+.btn:hover{transform:translateY(-2px);background:#0d2238}
+.btn svg{width:17px;height:17px;fill:currentColor}
+.btn.alt{background:#fff;color:var(--navy);box-shadow:inset 0 0 0 1.5px var(--navy)}
+.btn.soon{background:#E9EDF2;color:#7a8594;cursor:default;transform:none}
+.btn.soon::after{content:"soon";font-size:11px;background:#fff;border-radius:6px;padding:3px 6px;color:var(--orange-ink)}
+
+/* patch demo */
+.demo{background:#fff;border-radius:22px;padding:16px;box-shadow:0 20px 50px -20px rgba(20,48,77,.35), 0 0 0 1px var(--line)}
+.patches{position:relative;display:grid;grid-template-columns:repeat(14,1fr);border-radius:12px;overflow:hidden;aspect-ratio:650/605;touch-action:none;user-select:none;background:#000}
+.cell{position:relative;perspective:400px}
+.cell .f,.cell .b{position:absolute;inset:-0.5px;backface-visibility:hidden;transition:transform .45s cubic-bezier(.3,.7,.3,1);background-size:1400% 1400%}
+.cell .b{transform:rotateY(180deg)}
+.cell.on .f{transform:rotateY(-180deg)}
+.cell.on .b{transform:rotateY(0)}
+.demo-ctrl{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.chip{border:0;border-radius:999px;padding:8px 13px;font:600 13px/1 var(--body);background:var(--panel);color:var(--navy);cursor:pointer;transition:background .15s}
+.chip:hover{background:#e6ecf4}
+.chip.active{background:var(--orange);color:#fff}
+.demo-hint{font-size:13px;color:var(--muted);margin:10px 2px 0}
+.scenes{display:flex;gap:6px;margin-left:auto}
+.scenes button{width:26px;height:26px;border-radius:7px;border:0;background-size:cover;cursor:pointer;opacity:.55;outline:2px solid transparent;transition:.15s}
+.scenes button.active{opacity:1;outline-color:var(--orange)}
+
+/* ---------- tldr ---------- */
+.tldr{background:var(--navy);color:#fff;border-radius:var(--radius);padding:34px 36px;display:grid;grid-template-columns:1.3fr 1fr;gap:30px;align-items:center}
+.tldr p{font:600 clamp(20px,2.4vw,26px)/1.4 var(--head);margin:0}
+.tldr p em{font-style:normal;color:#FFB48E}
+.pills{display:grid;gap:10px}
+.pill{display:flex;gap:12px;align-items:center;background:rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;font-size:15px}
+.pill b{font-family:var(--head);font-size:22px;color:#FFB48E;min-width:28px;text-align:center}
+
+/* ---------- method ---------- */
+.fig{background:#fff;border-radius:var(--radius);box-shadow:0 0 0 1px var(--line);padding:14px;margin-bottom:26px}
+.fig img{border-radius:10px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:22px}
+.step{background:var(--panel);border-radius:16px;padding:20px}
+.step .n{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--orange);color:#fff;font:800 17px/1 var(--head);margin-bottom:12px}
+.step h3{font-size:20px;color:var(--navy);margin-bottom:6px}
+.step p{margin:0;font-size:15px;color:var(--ink-2)}
+.eq{background:var(--orange-soft);border-radius:16px;padding:18px;text-align:center;font-size:20px;overflow-x:auto}
+.eq .katex .hl{color:var(--orange-ink)}
+.eq small{display:block;font-size:14px;color:var(--ink-2);margin-top:6px}
+
+/* ---------- results ---------- */
+.panel{background:var(--panel);border-radius:var(--radius);padding:24px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.sub-ctrl{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;align-items:center}
+.sub-ctrl .lbl{font-size:13px;color:var(--muted);margin-right:4px}
+.seg-chip{border:0;border-radius:8px;padding:7px 11px;font:500 13px/1 var(--body);background:#fff;color:var(--ink-2);cursor:pointer;box-shadow:inset 0 0 0 1px var(--line)}
+.seg-chip.active{background:var(--navy);color:#fff;box-shadow:none}
+.bars{display:grid;gap:8px}
+.bar{display:grid;grid-template-columns:170px 1fr 64px;gap:12px;align-items:center;font-size:14px}
+.bar .name{text-align:right;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar.me .name{color:var(--orange-ink);font-weight:700}
+.track{height:24px;background:#fff;border-radius:6px;position:relative;overflow:hidden}
+.fill{position:absolute;left:0;top:0;bottom:0;border-radius:6px;transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.bar .val{font:500 14px var(--mono);color:var(--ink)}
+.bar.me .val{font-weight:700;color:var(--orange-ink)}
+.chart-foot{display:flex;flex-wrap:wrap;gap:18px;justify-content:space-between;margin-top:16px;font-size:13px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:16px}
+.legend span{display:inline-flex;gap:7px;align-items:center}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.note{font-size:14px;color:var(--ink-2);background:#fff;border-radius:10px;padding:10px 14px;margin-top:14px;display:none}
+.note.show{display:block}
+
+/* ---------- compare sliders ---------- */
+.cmp-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:22px;align-items:start}
+.cmp{position:relative;border-radius:14px;overflow:hidden;user-select:none;touch-action:pan-y;cursor:ew-resize;background:#000}
+.cmp img{width:100%;height:auto}
+.cmp .top{position:absolute;inset:0;clip-path:inset(0 0 0 50%)}
+.cmp .top img{height:100%;object-fit:cover}
+.cmp .handle{position:absolute;top:0;bottom:0;left:50%;width:3px;background:#fff;transform:translateX(-50%);box-shadow:0 0 8px rgba(0,0,0,.4);pointer-events:none}
+.cmp .handle::after{content:"⇆";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#fff;color:var(--navy);display:grid;place-items:center;font-size:18px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.tag{position:absolute;top:10px;padding:5px 10px;border-radius:8px;font:600 13px/1 var(--body);color:#fff;background:rgba(20,32,46,.75);pointer-events:none}
+.tag.l{left:10px}.tag.r{right:10px;background:var(--orange)}
+.side h3{font-size:19px;color:var(--navy);margin:0 0 8px}
+.side p{font-size:15px;color:var(--ink-2);margin:0 0 14px}
+.gt{border-radius:12px;overflow:hidden;position:relative;margin-bottom:14px}
+.gt .tag{background:rgba(20,32,46,.75)}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.thumbs button{width:64px;height:52px;border-radius:9px;border:0;background-size:cover;background-position:center;cursor:pointer;opacity:.55;outline:2.5px solid transparent;transition:.15s}
+.thumbs button.active{opacity:1;outline-color:var(--orange)}
+.subhead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px;margin:40px 0 16px}
+.subhead h3{font-size:24px;color:var(--navy)}
+
+/* ---------- reco gallery ---------- */
+.reco{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.rcard{border-radius:14px;overflow:hidden;position:relative;cursor:pointer;background:#000}
+.rcard img{transition:opacity .35s}
+.rcard .alt{position:absolute;inset:0;opacity:0}
+.rcard:hover .alt,.rcard.flip .alt{opacity:1}
+.rcard .tag{transition:opacity .2s}
+
+/* ---------- code ---------- */
+.codes{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+pre{margin:0;background:#0f1b2a;color:#d8e1ee;border-radius:14px;padding:18px 18px;overflow-x:auto;font:13.5px/1.6 var(--mono);position:relative}
+pre .c{color:#7d8ca3}.pre-k{color:#FFB48E}
+.codebox{position:relative;min-width:0}
+.codebox h3{font-size:17px;color:var(--navy);margin:0 0 10px}
+.copy{position:absolute;top:-3px;right:0;border:0;border-radius:8px;padding:6px 12px;font:600 12px var(--body);background:var(--navy);color:#fff;cursor:pointer}
+.copy:hover{background:var(--orange)}
+
+footer{padding:40px 0 60px;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+
+/* reveal */
+.rv{opacity:0;transform:translateY(16px);transition:opacity .6s, transform .6s}
+.rv.in{opacity:1;transform:none}
+@media (prefers-reduced-motion: reduce){.rv{opacity:1;transform:none}.cell .f,.cell .b,.fill{transition:none}}
+
+@media (max-width:860px){
+  .hero-grid,.tldr,.cmp-grid,.codes{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr}
+  .reco{grid-template-columns:1fr 1fr}
+  .bar{grid-template-columns:118px 1fr 54px;font-size:13px}
+  section{padding:48px 0}
+  .tldr{padding:26px 22px}
+  .scenes{margin-left:0}
+}
+</style>
+</head>
+<body>
+
+<!-- =============================================================
+     EDIT THESE LINKS. Leave a value as "" to show a "soon" button.
+     ============================================================= -->
+<script>
+window.DART_LINKS = {
+  paper:   "",   // e.g. BMVC proceedings PDF
+  arxiv:   "",   // e.g. "https://arxiv.org/abs/XXXX.XXXXX"
+  code:    "",   // e.g. "https://github.com/<you>/DART"
+  weights: "",   // e.g. "https://huggingface.co/<you>/DART-ViT-B16"
+};
+</script>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="venue"><i></i>BMVC 2026</span>
+      <h1><span class="acc">DART</span>: Depth-as-Target Pretraining
+        <span class="sub">for Surgical Vision Foundation Models</span></h1>
+      <p class="authors">
+        <a href="mailto:john.j.han@vanderbilt.edu">John Han</a><sup>1</sup>,&nbsp;
+        Adam Schmidt<sup>2</sup>,&nbsp; Muhammad Abdullah Jamal<sup>2</sup>,&nbsp;
+        Jie Ying Wu<sup>1</sup>,&nbsp; Omid Mohareri<sup>2</sup>
+      </p>
+      <p class="affil"><sup>1</sup>Vanderbilt University &nbsp;·&nbsp; <sup>2</sup>Intuitive Surgical, Inc.</p>
+      <div class="btns" id="btns">
+        <a class="btn" data-link="paper"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM14 3.5V8h4.5"/></svg>Paper</a>
+        <a class="btn" data-link="arxiv"><svg viewBox="0 0 24 24"><path d="M4 4h16v2H4zm0 5h16v2H4zm0 5h10v2H4zm0 5h10v2H4z"/></svg>arXiv</a>
+        <a class="btn" data-link="code"><svg viewBox="0 0 24 24"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.1c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.9 1.3 1.9 1.3 1.1 1.9 2.9 1.3 3.6 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6a4.7 4.7 0 0 1 1.3-3.2 4.3 4.3 0 0 1 .1-3.2s1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.6 18.3 5 18.3 5a4.3 4.3 0 0 1 .1 3.2 4.7 4.7 0 0 1 1.3 3.2c0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/></svg>Code</a>
+        <a class="btn" data-link="weights"><svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.3L18.8 8 12 11.7 5.2 8zM5 9.7l6 3.3v6.7l-6-3.3zm8 10v-6.7l6-3.3v6.7z"/></svg>Weights</a>
+        <a class="btn alt" href="#bibtex"><svg viewBox="0 0 24 24"><path d="M7 7h4v4H8.5c0 1.5.7 2.5 2.5 3v2c-3-.4-4-2.7-4-5zm7 0h4v4h-2.5c0 1.5.7 2.5 2.5 3v2c-3-.4-4-2.7-4-5z"/></svg>BibTeX</a>
+      </div>
+    </div>
+
+    <div class="demo rv">
+      <div class="patches" id="patches" aria-label="Interactive patch grid: hover to reveal depth"></div>
+      <div class="demo-ctrl">
+        <button class="chip active" data-mode="hover">✋ Hover to peek</button>
+        <button class="chip" data-mode="mask">🎲 Mask 50%</button>
+        <button class="chip" data-mode="all">🌊 All depth</button>
+        <div class="scenes" id="scenes"></div>
+      </div>
+      <p class="demo-hint" id="demoHint">Move over the image: each 16×16 patch flips to its <b>pseudo-depth target</b>.</p>
+    </div>
+  </div>
+</header>
+
+<main>
+<section>
+  <div class="wrap">
+    <div class="tldr rv">
+      <p>Ask DINOv2 to also <em>paint the depth</em> of the patches it can't see. The features get sharper for surgery, and at test time it still only needs <em>RGB</em>.</p>
+      <div class="pills">
+        <div class="pill"><b>0</b><span>extra inference cost: the depth head is thrown away after pretraining</span></div>
+        <div class="pill"><b>0</b><span>depth labels or sensors: targets are pseudo-depth from Depth Anything V2</span></div>
+        <div class="pill"><b>1</b><span>extra loss term on top of the unchanged DINOv2 recipe</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="method" style="padding-top:8px">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>One small head, one extra loss</h2>
+    <p class="lede">Natural-image foundation models transfer poorly to surgery, and standard self-supervised pretraining ignores scene geometry. DART keeps DINOv2 exactly as is and adds a pixel-space depth target at the masked iBOT patches.</p>
+    <div class="fig rv"><img src="static/img/overview.jpg" alt="DART overview: DINOv2 student-teacher with an added depth head that reconstructs pseudo-depth at masked patches" loading="lazy"></div>
+    <div class="steps">
+      <div class="step rv"><div class="n">1</div><h3>Pseudo-label</h3><p>Run Depth Anything V2-L once over 3.4M LEMON frames (938 h of surgical video). No sensors, no annotation.</p></div>
+      <div class="step rv"><div class="n">2</div><h3>Mask &amp; distill</h3><p>Standard DINOv2: DINO, iBOT and KoLeo losses with an EMA teacher, 50% of global-view patches masked.</p></div>
+      <div class="step rv"><div class="n">3</div><h3>Paint the depth</h3><p>A 3-layer MLP turns each <b>masked</b> student token into a 16×16 depth patch (ℓ1 loss). Discard it after pretraining.</p></div>
+    </div>
+    <div class="eq rv" id="eq"></div>
+  </div>
+</section>
+
+<section id="results" style="background:linear-gradient(#fff,#F8FAFC)">
+  <div class="wrap">
+    <div class="kicker">Results</div>
+    <h2>Better features, everywhere we looked</h2>
+    <p class="lede">Frozen ViT-B backbones with only task heads trained, on 8 out-of-domain surgical benchmarks. Same data, same budget: the only difference between DINOv2 (LEMON) and DART is the depth target.</p>
+    <div class="panel rv">
+      <div class="tabs" id="tabs">
+        <button class="chip active" data-tab="seg">Segmentation</button>
+        <button class="chip" data-tab="depth">Depth estimation</button>
+        <button class="chip" data-tab="phase">Phase recognition</button>
+        <button class="chip" data-tab="triplet">Triplet recognition</button>
+      </div>
+      <div class="sub-ctrl" id="subctrl"></div>
+      <div class="bars" id="bars"></div>
+      <div class="note" id="note"></div>
+      <div class="chart-foot">
+        <div class="legend">
+          <span><i style="background:var(--nat)"></i>Natural-image checkpoint</span>
+          <span><i style="background:var(--dom)"></i>In-domain (LEMON)</span>
+          <span><i style="background:var(--orange)"></i>DART</span>
+        </div>
+        <span id="metricNote"></span>
+      </div>
+    </div>
+
+    <div class="subhead"><h3>Segmentation: drag to compare</h3>
+      <div class="sub-ctrl" id="segBase" style="margin:0"><span class="lbl">Baseline</span></div>
+    </div>
+    <div class="cmp-grid rv">
+      <div>
+        <div class="cmp" id="segCmp">
+          <img class="bottom" alt="Baseline prediction">
+          <div class="top"><img alt="DART prediction"></div>
+          <div class="handle"></div>
+          <span class="tag l" data-role="left">DINOv2</span><span class="tag r">DART</span>
+        </div>
+        <div class="thumbs" id="segThumbs"></div>
+      </div>
+      <div class="side">
+        <div class="gt"><img id="segGT" alt="Ground truth"><span class="tag l">Ground truth</span></div>
+        <h3 id="segName">EndoVis18</h3>
+        <p>DART gives crisper instrument boundaries and fewer stray false-positive blobs, even against DINOv2 trained on identical data.</p>
+      </div>
+    </div>
+
+    <div class="subhead"><h3>Depth on SCARED-C</h3>
+      <div class="sub-ctrl" id="depBase" style="margin:0"><span class="lbl">Baseline</span></div>
+    </div>
+    <div class="cmp-grid rv">
+      <div>
+        <div class="cmp" id="depCmp">
+          <img class="bottom" alt="Baseline depth">
+          <div class="top"><img alt="DART depth"></div>
+          <div class="handle"></div>
+          <span class="tag l" data-role="left">DINOv2</span><span class="tag r">DART</span>
+        </div>
+        <div class="thumbs" id="depThumbs"></div>
+      </div>
+      <div class="side">
+        <div class="gt"><img id="depRGB" alt="Input RGB"><span class="tag l">Input</span></div>
+        <p>Finer delineation of small protruding structures, while LEMON-FM and DINOv2 tend to over-smooth. DART reaches δ1 = 0.653, the best of all models.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="kicker">Inside the features</div>
+    <h2>What does depth teach?</h2>
+    <p class="lede">First three PCA components of the patch features, shown as RGB. With the depth target, instruments and tissue become coherent regions with sharp edges, and specular highlights stop leaking into the features.</p>
+    <div class="cmp-grid rv">
+      <div>
+        <div class="cmp" id="pcaCmp">
+          <img class="bottom" alt="DINOv2 PCA features">
+          <div class="top"><img alt="DART PCA features"></div>
+          <div class="handle"></div>
+          <span class="tag l">DINOv2 (LEMON)</span><span class="tag r">DART</span>
+        </div>
+        <div class="thumbs" id="pcaThumbs"></div>
+      </div>
+      <div class="side">
+        <div class="gt"><img id="pcaRGB" alt="Input RGB"><span class="tag l">Input</span></div>
+        <p>Both models saw exactly the same images for the same number of steps.</p>
+      </div>
+    </div>
+
+    <div class="subhead"><h3>Depth reconstructions during pretraining</h3>
+      <span style="font-size:14px;color:var(--muted)">Hover or tap a frame to see DART's reconstruction</span></div>
+    <div class="reco" id="reco"></div>
+  </div>
+</section>
+
+<section id="code" style="background:var(--panel)">
+  <div class="wrap">
+    <div class="kicker">Use it</div>
+    <h2>Drop-in RGB backbone</h2>
+    <p class="lede">The released encoder is a plain ViT-B/16. Load it and use it like any DINOv2 backbone: no depth input anywhere.</p>
+    <div class="codes">
+      <div class="codebox">
+        <h3>Extract features</h3>
+<pre id="code1"><span class="pre-k">import</span> torch
+<span class="pre-k">from</span> dart.vit <span class="pre-k">import</span> ViT
+
+model = ViT(img_size=<span class="pre-k">224</span>, patch_size=<span class="pre-k">16</span>, embed_dim=<span class="pre-k">768</span>,
+            depth=<span class="pre-k">12</span>, num_heads=<span class="pre-k">12</span>)
+ckpt = torch.load(<span class="pre-k">"dart_vitb16.pth"</span>, map_location=<span class="pre-k">"cpu"</span>)
+model.load_state_dict(ckpt[<span class="pre-k">"teacher_backbone"</span>])
+model.eval()
+
+<span class="c"># img: (B, 3, H, W), ImageNet-normalized RGB</span>
+cls   = model(img)                   <span class="c"># (B, 768)</span>
+fmap  = model.forward_features(img)  <span class="c"># (B, 768, H/16, W/16)</span></pre>
+        <button class="copy" data-copy="code1">Copy</button>
+      </div>
+      <div class="codebox">
+        <h3>Pretrain your own</h3>
+<pre id="code2"><span class="c"># 1) RGB-D shards: video frames + Depth Anything V2 pseudo-depth</span>
+python video_to_rgbd_shards.py \
+  --video_dir /path/to/videos --output_path /path/to/shards \
+  --depth_anything_repo /path/to/Depth-Anything-V2 \
+  --model_checkpoint checkpoints/depth_anything_v2_vitl.pth \
+  --encoder vitl
+
+<span class="c"># 2) DINOv2 + depth-as-target pretraining</span>
+torchrun --nproc_per_node=2 train.py \
+  --data_path /path/to/shards --save_dir /save/path \
+  --arch vit_base --patch_size 16 --base_lr 1.5e-3 \
+  --batch_size 128 --momentum_teacher 0.996 \
+  --depth_loss_weight 0.1</pre>
+        <button class="copy" data-copy="code2">Copy</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="bibtex">
+  <div class="wrap">
+    <div class="kicker">Cite</div>
+    <h2>BibTeX</h2>
+    <div class="codebox" style="margin-top:18px">
+        <h3>If DART is useful in your work, please cite:</h3>
+<pre id="bib">@inproceedings{han2026dart,
+  title     = {DART: Depth-as-Target Pretraining for Surgical Vision Foundation Models},
+  author    = {Han, John and Schmidt, Adam and Jamal, Muhammad Abdullah and Wu, Jie Ying and Mohareri, Omid},
+  booktitle = {British Machine Vision Conference (BMVC)},
+  year      = {2026}
+}</pre>
+      <button class="copy" data-copy="bib">Copy</button>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">Questions? <a href="mailto:john.j.han@vanderbilt.edu">john.j.han@vanderbilt.edu</a> · Pretraining data: LEMON · Pseudo-depth: <a href="https://depth-anything-v2.github.io/">Depth Anything V2</a></div>
+</footer>
+
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script>
+const T = "static/img/tiles/";
+
+/* ---------------- link buttons ---------------- */
+document.querySelectorAll("[data-link]").forEach(a => {
+  const url = (window.DART_LINKS || {})[a.dataset.link];
+  if (url) { a.href = url; a.target = "_blank"; a.rel = "noopener"; }
+  else { a.classList.add("soon"); a.removeAttribute("href"); a.setAttribute("aria-disabled", "true"); }
+});
+
+/* ---------------- hero patch demo ---------------- */
+const N = 14, grid = document.getElementById("patches");
+let scene = 1, mode = "hover";
+const cells = [];
+for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+  const el = document.createElement("div"); el.className = "cell";
+  const pos = `${(c / (N - 1)) * 100}% ${(r / (N - 1)) * 100}%`;
+  el.innerHTML = `<div class="f" style="background-position:${pos}"></div><div class="b" style="background-position:${pos}"></div>`;
+  grid.appendChild(el); cells.push(el);
+}
+function setScene(k) {
+  scene = k;
+  const front = `url(${T}reco${k}_rgb.jpg)`;
+  const back = `url(${T}reco${k}_${mode === "mask" ? "pred" : "pseudo"}.jpg)`;
+  cells.forEach(el => { el.children[0].style.backgroundImage = front; el.children[1].style.backgroundImage = back; });
+  document.querySelectorAll("#scenes button").forEach((b, i) => b.classList.toggle("active", i + 1 === k));
+}
+const scenesEl = document.getElementById("scenes");
+for (let k = 1; k <= 6; k++) {
+  const b = document.createElement("button");
+  b.style.backgroundImage = `url(${T}reco${k}_rgb.jpg)`; b.title = `Scene ${k}`; b.setAttribute("aria-label", `Scene ${k}`);
+  b.onclick = () => { setScene(k); applyMode(); };
+  scenesEl.appendChild(b);
+}
+const hint = document.getElementById("demoHint");
+const hints = {
+  hover: "Move over the image: each 16×16 patch flips to its <b>pseudo-depth target</b>.",
+  mask: "Like iBOT, half the patches are masked. Flipped patches show <b>DART's depth reconstruction</b> from the student's features.",
+  all: "The full <b>pseudo-depth</b> map from Depth Anything V2, used only as a training target.",
+};
+function applyMode() {
+  cells.forEach(el => el.classList.remove("on"));
+  setScene(scene);
+  hint.innerHTML = hints[mode];
+  if (mode === "mask") {
+    const idx = cells.map((_, i) => i).sort(() => Math.random() - .5).slice(0, cells.length / 2);
+    idx.forEach((i, j) => setTimeout(() => cells[i].classList.add("on"), j * 4));
+  } else if (mode === "all") {
+    cells.forEach((el, i) => setTimeout(() => el.classList.add("on"), ((i % N) + Math.floor(i / N)) * 25));
+  }
+}
+document.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll("[data-mode]").forEach(x => x.classList.toggle("active", x === b));
+  applyMode();
+});
+function flipAt(x, y) {
+  if (mode !== "hover") return;
+  const r = grid.getBoundingClientRect();
+  const c = Math.floor((x - r.left) / r.width * N), rr = Math.floor((y - r.top) / r.height * N);
+  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+    const R = rr + dr, C = c + dc;
+    if (R < 0 || C < 0 || R >= N || C >= N || (dr && dc)) continue;
+    const el = cells[R * N + C];
+    if (!el.classList.contains("on")) {
+      el.classList.add("on");
+      setTimeout(() => { if (mode === "hover") el.classList.remove("on"); }, 1400);
+    }
+  }
+}
+grid.addEventListener("pointermove", e => flipAt(e.clientX, e.clientY));
+grid.addEventListener("pointerdown", e => flipAt(e.clientX, e.clientY));
+setScene(1);
+
+/* ---------------- equation ---------------- */
+window.addEventListener("load", () => {
+  const eq = document.getElementById("eq");
+  const tex = String.raw`\mathcal{L} \;=\; \mathcal{L}_{\text{DINO}} + \mathcal{L}_{\text{iBOT}} + \lambda_{\text{KoLeo}}\,\mathcal{L}_{\text{KoLeo}} \;+\; \htmlClass{hl}{\lambda_{\text{depth}}\,\tfrac{1}{|\mathcal{M}|}\sum_{i\in\mathcal{M}} \lVert h(p^S_i) - d_i \rVert_1}`;
+  try { katex.render(tex, eq, { displayMode: true, trust: true, throwOnError: false }); }
+  catch (e) { eq.textContent = "L = L_DINO + L_iBOT + λ_KoLeo L_KoLeo + λ_depth · L_depth"; }
+  eq.insertAdjacentHTML("beforeend", "<small>𝓜 = iBOT-masked patches · d<sub>i</sub> = pseudo-depth patch · λ<sub>depth</sub> = 0.1</small>");
+});
+
+/* ---------------- results bars ---------------- */
+const NAT = "var(--nat)", DOM = "var(--dom)", ME = "var(--orange)";
+const MODELS = [
+  ["DINOv2 (LVD-142M)", NAT], ["DINOv3 (LVD-1.7B)", NAT], ["MAE (IN-1k)", NAT], ["MultiMAE (IN-1k)", NAT],
+  ["LEMON-FM", DOM], ["MAE (LEMON)", DOM], ["MultiMAE (LEMON)", DOM], ["DINOv2 (LEMON)", DOM], ["DART", ME],
+];
+// segmentation: per dataset [linear, multiscale]
+const SEG_DS = ["EndoVis18", "CholecInstanceSeg", "SAR-RARP50", "CholecSeg8k", "PhaKIR"];
+const SEG = [
+  [28.8,31.8,48.3,52.6,53.5,62.0,36.7,38.5,10.3,10.4],
+  [30.1,32.5,53.5,55.2,58.0,64.0,50.0,43.7,11.6,10.6],
+  [26.0,28.0,37.1,47.1,52.7,55.1,37.9,38.9,7.6,8.8],
+  [26.6,27.0,40.7,48.7,51.2,56.1,36.0,36.7,8.3,10.1],
+  [25.7,31.2,40.6,51.0,52.0,66.6,33.9,42.4,8.7,11.0],
+  [31.9,32.6,41.1,56.2,65.7,67.1,44.3,46.0,12.0,13.2],
+  [30.8,32.6,59.5,55.1,62.7,66.0,43.4,43.1,11.7,12.2],
+  [34.1,34.9,58.2,59.7,63.9,64.4,49.7,50.5,14.1,15.7],
+  [34.9,36.8,66.2,68.9,68.7,70.2,52.4,50.5,14.5,16.2],
+];
+const DEPTH = [[.506,.613],[.500,.623],[.499,.598],[.487,.630],[.485,.608],[.512,.609],[.498,.605],[.542,.626],[.557,.653]];
+const PHASE = [60.7,56.6,25.9,44.2,67.1,45.0,43.9,70.8,71.5];
+const TRIP  = [6.2,4.8,2.5,3.5,7.9,3.6,3.5,6.4,6.9];
+
+const state = { tab: "seg", ds: 0, head: 1, dhead: 1 };
+const sub = document.getElementById("subctrl"), barsEl = document.getElementById("bars"),
+      noteEl = document.getElementById("note"), metricNote = document.getElementById("metricNote");
+
+function chips(label, opts, cur, onPick) {
+  const wrap = document.createElement("span"); wrap.style.display = "contents";
+  wrap.insertAdjacentHTML("beforeend", `<span class="lbl">${label}</span>`);
+  opts.forEach((o, i) => {
+    const b = document.createElement("button"); b.className = "seg-chip" + (i === cur ? " active" : ""); b.textContent = o;
+    b.onclick = () => { onPick(i); render(); }; wrap.appendChild(b);
+  });
+  sub.appendChild(wrap);
+}
+function render() {
+  sub.innerHTML = "";
+  let vals, fmt = v => v.toFixed(1), metric = "", note = "";
+  if (state.tab === "seg") {
+    chips("Dataset", SEG_DS, state.ds, i => state.ds = i);
+    sub.insertAdjacentHTML("beforeend", '<span style="width:12px"></span>');
+    chips("Head", ["Linear", "Multiscale"], state.head, i => state.head = i);
+    vals = SEG.map(r => r[state.ds * 2 + state.head]); metric = "mIoU ↑ · mean of 3 seeds";
+  } else if (state.tab === "depth") {
+    chips("Head", ["Linear", "DPT"], state.dhead, i => state.dhead = i);
+    vals = DEPTH.map(r => r[state.dhead]); fmt = v => v.toFixed(3); metric = "SCARED-C δ1 ↑";
+  } else if (state.tab === "phase") {
+    vals = PHASE; metric = "Cholec80 F1 (%) ↑";
+    note = "Depth helps image-level understanding too: +0.7 F1 over DINOv2 and +4.4 over LEMON-FM.";
+  } else {
+    vals = TRIP; metric = "CholecT50 AP<sub>ivt</sub> (%) ↑";
+    note = "Honest result: LEMON-FM wins here. It is a ConvNeXt-L with over 2× the parameters and a temporal view-sampling strategy. DART beats every baseline of comparable size.";
+  }
+  const rows = MODELS.map((m, i) => ({ name: m[0], color: m[1], v: vals[i], me: m[0] === "DART" }))
+                     .sort((a, b) => b.v - a.v);
+  const max = Math.max(...vals), min = Math.min(...vals);
+  const lo = state.tab === "depth" ? Math.max(0, min - (max - min) * 0.6) : 0;
+  barsEl.innerHTML = rows.map(r => `<div class="bar${r.me ? " me" : ""}"><span class="name" title="${r.name}">${r.name}</span>
+    <div class="track"><div class="fill" style="width:0;background:${r.color}" data-w="${((r.v - lo) / (max * 1.04 - lo)) * 100}"></div></div>
+    <span class="val">${fmt(r.v)}</span></div>`).join("");
+  requestAnimationFrame(() => requestAnimationFrame(() =>
+    barsEl.querySelectorAll(".fill").forEach(f => f.style.width = f.dataset.w + "%")));
+  metricNote.innerHTML = metric + (lo > 0 ? ` · axis starts at ${lo.toFixed(2)}` : "");
+  noteEl.textContent = note; noteEl.classList.toggle("show", !!note);
+}
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
+  state.tab = b.dataset.tab;
+  document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("active", x === b));
+  render();
+});
+render();
+
+/* ---------------- compare sliders ---------------- */
+function makeCmp(el) {
+  const top = el.querySelector(".top"), handle = el.querySelector(".handle");
+  const set = x => {
+    const r = el.getBoundingClientRect(); const p = Math.min(100, Math.max(0, (x - r.left) / r.width * 100));
+    top.style.clipPath = `inset(0 0 0 ${p}%)`; handle.style.left = p + "%";
+  };
+  let drag = false;
+  el.addEventListener("pointerdown", e => { drag = true; el.setPointerCapture(e.pointerId); set(e.clientX); });
+  el.addEventListener("pointermove", e => { if (drag || e.pointerType === "mouse") set(e.clientX); });
+  el.addEventListener("pointerup", () => drag = false);
+  el.addEventListener("pointerleave", () => { if (!drag) { top.style.clipPath = "inset(0 0 0 50%)"; handle.style.left = "50%"; } });
+  return {
+    load(left, right, leftLabel) {
+      el.querySelector(".bottom").src = left; top.querySelector("img").src = right;
+      const t = el.querySelector('[data-role="left"]'); if (t && leftLabel) t.textContent = leftLabel;
+    }
+  };
+}
+function thumbs(id, items, onPick) {
+  const box = document.getElementById(id);
+  items.forEach((it, i) => {
+    const b = document.createElement("button"); b.style.backgroundImage = `url(${it.thumb})`;
+    b.title = it.name || ""; b.setAttribute("aria-label", it.name || `Example ${i + 1}`);
+    b.onclick = () => { box.querySelectorAll("button").forEach(x => x.classList.remove("active")); b.classList.add("active"); onPick(i); };
+    box.appendChild(b);
+  });
+  box.querySelector("button").classList.add("active");
+}
+function baselinePicker(id, opts, onPick) {
+  const box = document.getElementById(id);
+  opts.forEach(([key, label], i) => {
+    const b = document.createElement("button"); b.className = "seg-chip" + (i === 0 ? " active" : ""); b.textContent = label;
+    b.onclick = () => { box.querySelectorAll(".seg-chip").forEach(x => x.classList.remove("active")); b.classList.add("active"); onPick(key, label); };
+    box.appendChild(b);
+  });
+}
+const BASES = [["dinov2", "DINOv2"], ["lemonfm", "LEMON-FM"], ["mae", "MAE"], ["multimae", "MultiMAE"]];
+
+// segmentation
+const SEG_EX = [["EndoVis18", 1], ["CholecInstanceSeg", 2], ["CholecSeg8k", 3], ["CholecSeg8k", 4]];
+const seg = makeCmp(document.getElementById("segCmp")); let segI = 1, segB = ["dinov2", "DINOv2"];
+function segShow() {
+  seg.load(`${T}seg${segI}_${segB[0]}.jpg`, `${T}seg${segI}_dart.jpg`, segB[1]);
+  document.getElementById("segGT").src = `${T}seg${segI}_gt.jpg`;
+  document.getElementById("segName").textContent = SEG_EX[segI - 1][0];
+}
+thumbs("segThumbs", SEG_EX.map(([n, k]) => ({ name: n, thumb: `${T}seg${k}_gt.jpg` })), i => { segI = i + 1; segShow(); });
+baselinePicker("segBase", BASES, (k, l) => { segB = [k, l]; segShow(); });
+segShow();
+
+// depth
+const dep = makeCmp(document.getElementById("depCmp")); let depI = 1, depB = ["dinov2", "DINOv2"];
+function depShow() {
+  dep.load(`${T}scared${depI}_${depB[0]}.jpg`, `${T}scared${depI}_dart.jpg`, depB[1]);
+  document.getElementById("depRGB").src = `${T}scared${depI}_rgb.jpg`;
+}
+thumbs("depThumbs", [1, 2].map(k => ({ name: `SCARED-C ${k}`, thumb: `${T}scared${k}_rgb.jpg` })), i => { depI = i + 1; depShow(); });
+baselinePicker("depBase", BASES, (k, l) => { depB = [k, l]; depShow(); });
+depShow();
+
+// PCA
+const pca = makeCmp(document.getElementById("pcaCmp")); let pcaI = 1;
+function pcaShow() {
+  pca.load(`${T}pca${pcaI}_dinov2.jpg`, `${T}pca${pcaI}_dart.jpg`);
+  document.getElementById("pcaRGB").src = `${T}pca${pcaI}_rgb.jpg`;
+}
+thumbs("pcaThumbs", [1, 2, 3, 4, 5, 6].map(k => ({ name: `Example ${k}`, thumb: `${T}pca${k}_rgb.jpg` })), i => { pcaI = i + 1; pcaShow(); });
+pcaShow();
+
+/* ---------------- reconstruction gallery ---------------- */
+document.getElementById("reco").innerHTML = [1, 2, 3, 4, 5, 6].map(k => `
+  <div class="rcard" tabindex="0" role="button" aria-label="Toggle depth reconstruction">
+    <img src="${T}reco${k}_pseudo.jpg" alt="Pseudo-depth target" loading="lazy">
+    <img class="alt" src="${T}reco${k}_pred.jpg" alt="DART reconstruction" loading="lazy">
+    <span class="tag l">Target</span>
+  </div>`).join("");
+document.querySelectorAll(".rcard").forEach(c => {
+  const tag = c.querySelector(".tag");
+  const upd = on => { tag.textContent = on ? "DART reconstruction" : "Target"; tag.style.background = on ? "var(--orange)" : ""; };
+  c.addEventListener("mouseenter", () => upd(true)); c.addEventListener("mouseleave", () => upd(c.classList.contains("flip")));
+  c.addEventListener("click", () => { c.classList.toggle("flip"); upd(c.classList.contains("flip")); });
+  c.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); c.click(); } });
+});
+
+/* ---------------- copy buttons ---------------- */
+document.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => {
+  try { await navigator.clipboard.writeText(document.getElementById(b.dataset.copy).innerText); b.textContent = "Copied!"; }
+  catch { b.textContent = "Select & copy"; }
+  setTimeout(() => b.textContent = "Copy", 1500);
+});
+
+/* ---------------- reveal on scroll ---------------- */
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: .12 });
+document.querySelectorAll(".rv").forEach(el => io.observe(el));
+</script>
+</body>
+</html>
